@@ -6,10 +6,19 @@ module.exports = {
 		path: path.resolve(__dirname, 'build'),
 		filename: 'cinematosis.js'
 	},
+	performance: {
+		maxEntrypointSize: 1024000,
+		maxAssetSize: 1024000,
+	},
 	mode: 'production',
 	module: {
 		rules: [
 			{ test: /\.txt$/, use: 'raw-loader' },
+			{
+				test: /\.js$/,
+				enforce: "pre",
+				use: ["source-map-loader"],
+			},
 			{
 				test: /\.js$/,
 				exclude:  /(node_modules)/,
@@ -24,6 +33,7 @@ module.exports = {
 			}
 		],
 	},
+	devtool: 'source-map',
 	devServer: {
 		stats: {
 			hash: false,
@@ -38,5 +48,4 @@ module.exports = {
 		port: 7007,
 		hot: true,
 	},
-	devtool: 'eval-cheap-source-map',
 };
