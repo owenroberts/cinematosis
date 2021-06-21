@@ -1,8 +1,10 @@
-import { choice } from './Cool';
+import { choice, randInt } from './Cool';
 import * as PIXI from 'pixi.js';
-import { Engine, World, Runner, Composite, Bodies, MouseConstraint, Mouse } from 'matter-js';
+import { Engine, World, Runner, Composite, Bodies, Render, MouseConstraint, Mouse } from 'matter-js';
 import KeyboardEvent from './KeyboardEvent';
 import PhysicsObject from './PhysicsObject';
+import Terrain from './Terrain';
+
 
 let type = "WebGL";
 if(!PIXI.utils.isWebGLSupported()){
@@ -13,37 +15,57 @@ let TextureCache = PIXI.utils.TextureCache,
 	Sprite = PIXI.Sprite;
 
 let w = window.innerWidth, h = window.innerHeight;
-let app = new PIXI.Application({ width: w, height: h });
-document.body.appendChild(app.view);
-let state, bg;
+// let app = new PIXI.Application({ width: w, height: h });
+let renderer = new PIXI.Renderer({ 
+	view: document.getElementById('canvas'), 
+	width: w, 
+	height: h,
+});
+let ticker = new PIXI.Ticker();
+let loader = new PIXI.Loader();
+let stage = new PIXI.Container();
+let renderStage = new PIXI.Container();
+renderStage.addChild(stage);
+document.body.appendChild(renderer.view);
+let state, bg, terrain;
+
 
 let bodyPartsImages = ['head', 'body', 'beak', 'leg-left', 'leg-right'];
 bodyPartsImages.forEach(name => {
-	app.loader.add(name, `static/images/${name}.png`);
+	loader.add(name, `static/images/${name}.png`);
 });
 
-app.loader
+loader
 	.add('BG', "static/images/bg-test.png")
 
-app.loader.load(setup);
+loader.load(setup);
 
 const engine = Engine.create();
+let physicsRenderer = {
+	stage: new PIXI.Container(),
+	graphics: new PIXI.Graphics(),
+};
+physicsRenderer.stage.addChild(physicsRenderer.graphics);
+let showPhysics = true;
+if (showPhysics) renderStage.addChild(physicsRenderer.stage);
+
 const objects = [];
 
 const ground = Bodies.rectangle(w/2, h - 100, w, 100, { isStatic: true });
 World.add(engine.world, [ground]);
 
 const mouseConstraint = MouseConstraint.create(engine, {
-	mouse: Mouse.create(app.view),
+	mouse: Mouse.create(renderer.view),
 });
 
 World.add(engine.world, mouseConstraint);
 
 function setup() {
-	app.renderer.backgroundColor = 0xebebeb;
-	app.renderer.autoResize = true;
+	renderer.backgroundColor = 0xebebeb;
+	renderer.autoResize = true;
 
-	const testObject = new PhysicsObject(TextureCache[choice(bodyPartsImages)], 300, 300);
+	const bodyPart = choice(bodyPartsImages);
+	const testObject = new PhysicsObject(bodyPart, TextureCache[bodyPart], 300, 300, true);
 	objects.push(testObject);
 	World.addBody(engine.world, testObject.body);
 
@@ -51,12 +73,20 @@ function setup() {
 	bg.anchor.x = 0.5;
 	bg.x = w / 2;
 
-	app.stage.addChild(bg);
-	objects.forEach(obj => { app.stage.addChild(obj.sprite); });
+	terrain = new Terrain(w, h, body => {
+		World.addBody(engine.world, body);
+	});
+	
+
+	stage.addChild(bg);
+	objects.forEach(obj => { stage.addChild(obj.sprite); });
 
 	state = play;
-	app.ticker.add(delta => gameLoop(delta));
+	ticker.add(delta => gameLoop(delta));
+	ticker.start();
 	Runner.run(engine);
+
+	console.log(Composite.allBodies(engine.world));
 }
 
 function gameLoop(delta){
@@ -78,10 +108,49 @@ function play(delta) {
 		objects[i].update();
 	}
 
+	if (showPhysics) renderPhysics();
+	renderer.render(renderStage);
+}
+
+function renderPhysics() {
+	const bodies = Composite.allBodies(engine.world);
+	physicsRenderer.graphics.clear();
+	physicsRenderer.graphics.lineStyle(2, 0x00dd22);
+
+	for (let i = 0; i < bodies.length; i += 1) {
+		const { vertices, parts } = bodies[i];
+		physicsRenderer.graphics.moveTo(vertices[0].x, vertices[0].y);
+		for (let j = 1; j < vertices.length; j += 1) {
+			physicsRenderer.graphics.lineTo(vertices[j].x, vertices[j].y);
+		}
+		physicsRenderer.graphics.lineTo(vertices[0].x, vertices[0].y);
+
+		for (let k = 0; k < parts.length; k++) {
+			const { vertices } = parts[k];
+
+			physicsRenderer.graphics.moveTo(vertices[0].x, vertices[0].y);
+			for (let j = 1; j < vertices.length; j += 1) {
+				physicsRenderer.graphics.lineTo(vertices[j].x, vertices[j].y);
+			}
+			physicsRenderer.graphics.lineTo(vertices[0].x, vertices[0].y);
+
+		}
+	}
+
+
 }
 
 /* keyboard events */
 let rightArrow = KeyboardEvent('ArrowRight');
 let leftArrow = KeyboardEvent('ArrowLeft');
+
+let n = KeyboardEvent('n');
+n.press = function() {
+	const bodyPart = choice(bodyPartsImages);
+	const obj = new PhysicsObject(bodyPart, TextureCache[bodyPart], randInt(w), randInt(h/2));
+	objects.push(obj);
+	World.addBody(engine.world, obj.body);
+	stage.addChild(obj.sprite);
+};
 
 

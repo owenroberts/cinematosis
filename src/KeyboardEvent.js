@@ -6,7 +6,7 @@ export default function KeyboardEvent(value) {
 	const key = {
 		value: value,
 		isDown: false,
-		isUp: false,
+		isUp: true,
 		press: undefined,
 		release: undefined,
 	};
