@@ -5,8 +5,7 @@
 import { World, Composite, Common, Svg, Query, Bodies } from 'matter-js';
 Common.setDecomp(require('poly-decomp'));
 
-export default function Terrain(w, h, callback) {
-
+export default function Terrain(callback) {
 
 	if (typeof fetch !== 'undefined') {
 		var select = function(root, selector) {
@@ -19,27 +18,14 @@ export default function Terrain(w, h, callback) {
 				.then(function(raw) { return (new window.DOMParser()).parseFromString(raw, 'image/svg+xml'); });
 		};
 
-        loadSvg('./static/svgs/terrain.svg')
-            .then(function(root) {
-                var paths = select(root, 'path');
-
-                var vertexSets = paths.map(function(path) { return Svg.pathToVertices(path, 30); });
-
-                let body = Bodies.fromVertices(960, 600, vertexSets, {
-                    isStatic: true,
-                    render: {
-                        fillStyle: '#060a19',
-                        strokeStyle: '#060a19',
-                        lineWidth: 1
-                    }
-                }, true);
-                console.log(body);
-                callback(body);
-
-            });
+		loadSvg('./static/svgs/terrain.svg')
+			.then(function(root) {
+				var paths = select(root, 'path');
+				let vertexSets = paths.map(function(path) { return Svg.pathToVertices(path, 30); });
+				callback(vertexSets);
+			});
 	} else {
 		Common.warn('Fetch is not available. Could not load SVG.');
 	}
-
 
 }

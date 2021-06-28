@@ -1,6 +1,7 @@
 import { choice, randInt } from './Cool';
+import C from './Constants';
 import * as PIXI from 'pixi.js';
-import { Engine, World, Runner, Composite, Bodies, Render, MouseConstraint, Mouse } from 'matter-js';
+import { Engine, Runner, Composite, Bodies, Render, MouseConstraint, Mouse, Events } from 'matter-js';
 import KeyboardEvent from './KeyboardEvent';
 import PhysicsObject from './PhysicsObject';
 import Terrain from './Terrain';
@@ -12,35 +13,38 @@ if(!PIXI.utils.isWebGLSupported()){
 }
 PIXI.utils.sayHello(type);
 let TextureCache = PIXI.utils.TextureCache,
-	Sprite = PIXI.Sprite;
+	Sprite = PIXI.Sprite,
+	Container = PIXI.Container;
 
 let w = window.innerWidth, h = window.innerHeight;
-// let app = new PIXI.Application({ width: w, height: h });
 let renderer = new PIXI.Renderer({ 
 	view: document.getElementById('canvas'), 
 	width: w, 
 	height: h,
+	antialias: true,
 });
 let ticker = new PIXI.Ticker();
 let loader = new PIXI.Loader();
-let stage = new PIXI.Container();
-let renderStage = new PIXI.Container();
+let stage = new Container();
+let renderStage = new Container();
 renderStage.addChild(stage);
 document.body.appendChild(renderer.view);
-let state, bg, terrain;
+let state, bg;
 
-
-let bodyPartsImages = ['head', 'body', 'beak', 'leg-left', 'leg-right'];
-bodyPartsImages.forEach(name => {
-	loader.add(name, `static/images/${name}.png`);
+C.bodyParts.forEach(partName => {
+	loader.add(partName, `static/images/${partName}.png`);
 });
+loader.add('BG', "static/images/bg-test.png")
 
-loader
-	.add('BG', "static/images/bg-test.png")
-
-loader.load(setup);
+let terrain = new Terrain(terrainLoaded);
+let terrainVerts;
+function terrainLoaded(verts) {
+	terrainVerts = verts;
+	loader.load(setup);
+}
 
 const engine = Engine.create();
+engine.gravity.y = 0;
 let physicsRenderer = {
 	stage: new PIXI.Container(),
 	graphics: new PIXI.Graphics(),
@@ -51,42 +55,56 @@ if (showPhysics) renderStage.addChild(physicsRenderer.stage);
 
 const objects = [];
 
-const ground = Bodies.rectangle(w/2, h - 100, w, 100, { isStatic: true });
-World.add(engine.world, [ground]);
-
 const mouseConstraint = MouseConstraint.create(engine, {
 	mouse: Mouse.create(renderer.view),
 });
 
-World.add(engine.world, mouseConstraint);
+Composite.add(engine.world, mouseConstraint);
+
+function addPart(parts, x, y) {
+	const bodyPart = new PhysicsObject(parts, TextureCache, x, y, true);
+	objects.push(bodyPart);
+	Composite.addBody(engine.world, bodyPart.body);
+	stage.addChild(bodyPart.sprite);
+}
 
 function setup() {
 	renderer.backgroundColor = 0xebebeb;
 	renderer.autoResize = true;
 
-	const bodyPart = choice(bodyPartsImages);
-	const testObject = new PhysicsObject(bodyPart, TextureCache[bodyPart], 300, 300, true);
-	objects.push(testObject);
-	World.addBody(engine.world, testObject.body);
+	// const bodyPart = choice(C.bodyParts);
+	addPart(['body', 'head'], 300, 300);
+	addPart(['body', 'legRight'], 450, 300);
+	addPart(['head', 'beak'], 600, 300);
+	addPart('head', 800, 100);
+	addPart('legRight', 900, 400);
+
 
 	bg = new Sprite(TextureCache.BG);
 	bg.anchor.x = 0.5;
 	bg.x = w / 2;
-
-	terrain = new Terrain(w, h, body => {
-		World.addBody(engine.world, body);
-	});
-	
-
 	stage.addChild(bg);
-	objects.forEach(obj => { stage.addChild(obj.sprite); });
 
+	let terrainBody = Bodies.fromVertices(960, 620, terrainVerts, {
+		isStatic: true,
+		render: {
+			fillStyle: '#060a19',
+			strokeStyle: '#060a19',
+			lineWidth: 1
+		},
+		collisionFilter: {
+			category: C.defaultCollisionLayer,
+			mask: C.defaultCollisionLayer,
+		}
+	}, true);
+	Composite.addBody(engine.world, terrainBody);
+	
 	state = play;
 	ticker.add(delta => gameLoop(delta));
 	ticker.start();
 	Runner.run(engine);
 
-	console.log(Composite.allBodies(engine.world));
+	// console.log(Composite.allBodies(engine.world));
 }
 
 function gameLoop(delta){
@@ -106,6 +124,14 @@ function play(delta) {
 
 	for (let i = 0; i < objects.length; i++) {
 		objects[i].update();
+		if (prevMousedBody && overlappedBody) {
+			if (objects[i].body) {
+				if (objects[i].body.id === prevMousedBody.id) {
+					if (objects[i].checkJoin()) joinBodies();
+				}
+			}
+		}
+		
 	}
 
 	if (showPhysics) renderPhysics();
@@ -136,9 +162,90 @@ function renderPhysics() {
 
 		}
 	}
-
-
 }
+
+function joinBodies() {
+	const ids = [prevMousedBody.id, overlappedBody.id];
+	const newParts = [...prevMousedBody.gameParent.parts, ...overlappedBody.gameParent.parts];
+	const x = (prevMousedBody.position.x + overlappedBody.position.x) / 2;
+	const y = (prevMousedBody.position.y + overlappedBody.position.y) / 2;
+	for (let i = objects.length - 1; i >= 0; i--) { 
+		if (ids.includes(objects[i].body.id)) {
+			stage.removeChild(objects[i].sprite);
+			Composite.removeBody(engine.world, objects[i].body);
+			objects.splice(i, 1);
+		}
+	}
+	addPart(newParts, x, y);
+	prevMousedBody = undefined;
+	overlappedBody = undefined;
+}
+
+/* mouse events */
+let prevMousedBody;
+let overlappedBody;
+
+Events.on(mouseConstraint, 'mousedown', event => {
+	if (mouseConstraint.body) {
+		prevMousedBody = mouseConstraint.body;
+		// prevMousedBody.collisionFilter.category = C.mousedCollisionLayer;
+		prevMousedBody.isSensor = true;
+		for (let i = 0; i < prevMousedBody.parts.length; i++) {
+			// console.log(prevMousedBody.parts[i]);
+			prevMousedBody.parts[i].isSensor = true;
+			// console.log(prevMousedBody.parts[i].isSensor);
+
+		}
+		// console.log(prevMousedBody, prevMousedBody.isSensor)
+		// console.log(prevMousedBody.id, prevMousedBody.gameParent);
+	}
+});
+
+Events.on(mouseConstraint, 'mouseup', event => {
+	if (prevMousedBody) {
+		prevMousedBody.isSensor = false;
+		for (let i = 0; i < prevMousedBody.parts.length; i++) {
+			prevMousedBody.parts[i].isSensor = false;
+		}
+	}
+});
+
+Events.on(engine, 'collisionStart', event => {
+	if (prevMousedBody) {
+ 		const pairs = event.pairs;
+		for (let i = 0; i < pairs.length; i++) {
+			const { bodyA, bodyB } = pairs[i];
+			const a = bodyA.parent;
+			const b = bodyB.parent;
+			if ((a.gameParent && b.gameParent) &&
+				(a.id === prevMousedBody.id ||
+				b.id === prevMousedBody.id)) {
+				if (a.gameParent.canJoin(b.gameParent.parts)) {
+					a.gameParent.startOverlap();
+					b.gameParent.startOverlap();
+					overlappedBody = a.id === prevMousedBody.id ? b : a;
+				}
+			}
+		}
+	}
+});
+
+Events.on(engine, 'collisionEnd', function(event) {
+	if (prevMousedBody && overlappedBody) {
+		const pairs = event.pairs;
+		for (let i = 0; i < pairs.length; i++) {
+			const { bodyA, bodyB } = pairs[i];
+			const a = bodyA.parent;
+			const b = bodyB.parent;
+			if ((a.id === prevMousedBody.id || a.id === overlappedBody.id) &&
+				(b.id === prevMousedBody.id || b.id === overlappedBody.id)) {
+				a.gameParent.unOverlap();
+				b.gameParent.unOverlap();
+				overlappedBody = undefined;		
+			}
+		}
+	}
+});
 
 /* keyboard events */
 let rightArrow = KeyboardEvent('ArrowRight');
@@ -146,10 +253,10 @@ let leftArrow = KeyboardEvent('ArrowLeft');
 
 let n = KeyboardEvent('n');
 n.press = function() {
-	const bodyPart = choice(bodyPartsImages);
-	const obj = new PhysicsObject(bodyPart, TextureCache[bodyPart], randInt(w), randInt(h/2));
+	const bodyPart = choice(C.bodyParts);
+	const obj = new PhysicsObject(bodyPart, TextureCache, randInt(w), randInt(h/2));
 	objects.push(obj);
-	World.addBody(engine.world, obj.body);
+	Composite.addBody(engine.world, obj.body);
 	stage.addChild(obj.sprite);
 };
 
