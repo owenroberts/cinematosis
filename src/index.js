@@ -1,7 +1,7 @@
 import { choice, randInt } from './Cool';
 import C from './Constants';
 import * as PIXI from 'pixi.js';
-import { Engine, Runner, Composite, Bodies, Render, MouseConstraint, Mouse, Events } from 'matter-js';
+import { Engine, Runner, Composite, Bodies, Body, Render, MouseConstraint, Mouse, Events } from 'matter-js';
 import KeyboardEvent from './KeyboardEvent';
 import PhysicsObject from './PhysicsObject';
 import Terrain from './Terrain';
@@ -151,16 +151,15 @@ function setup() {
 	renderer.autoResize = true;
 
 	// const bodyPart = choice(C.bodyParts);
-	addPart('head', 300, 100);
+	addPart('head', 300, 400);
 	addPart('body', 600, 400);
 
-
 	bg = new Sprite(TextureCache.BG);
-	bg.anchor.x = 0.5;
-	bg.x = w / 2;
+	bg.position.set(w / 2, h / 2);
+	bg.anchor.set(0.5, 0.5);
 	stage.addChild(bg);
-
-	let terrainBody = Bodies.fromVertices(960, 620, terrainVerts, {
+	
+	let terrainBody = Bodies.fromVertices(0, 0, terrainVerts, {
 		isStatic: true,
 		render: {
 			fillStyle: '#060a19',
@@ -172,6 +171,15 @@ function setup() {
 			mask: C.defaultCollisionLayer,
 		}
 	}, true);
+	const tw = Math.abs(terrainBody.bounds.max.x - terrainBody.bounds.min.x);
+	const th = Math.abs(terrainBody.bounds.max.y - terrainBody.bounds.min.y);
+
+	// console.log('canvas', w, h);
+	// console.log('image', bg.width, bg.height);
+	// console.log('terrain body', tw, th);
+	
+	bg.position.set(w / 2 - 270, h - 240); // ??
+	Body.setPosition(terrainBody, { x: w / 2, y: h - th / 2});
 	Composite.addBody(engine.world, terrainBody);
 	
 	state = play;
@@ -278,6 +286,7 @@ Events.on(mouseConstraint, 'mouseup', event => {
 		for (let i = 0; i < prevMousedBody.parts.length; i++) {
 			prevMousedBody.parts[i].isSensor = false;
 		}
+		prevMousedBody = undefined;
 		playSFX('releasePart');
 	}
 });
@@ -332,10 +341,20 @@ nKey.press = function() {
 	addPart(choice(C.bodyParts), randInt(w), randInt(h/2));
 };
 
-
 let sKey = KeyboardEvent('s');
 sKey.press = function() {
 	startSound();
 };
 
+let gKey = KeyboardEvent('g');
+gKey.press = function() {
+	if (engine.gravity.y === 0) engine.gravity.y = 1;
+	else if (engine.gravity.y === 1) engine.gravity.y = 0;
+};
 
+let pKey = KeyboardEvent('p');
+pKey.press = function() {
+	showPhysics = !showPhysics;
+	if (showPhysics) renderStage.addChild(physicsRenderer.stage);
+	else renderStage.removeChild(physicsRenderer.stage);
+};

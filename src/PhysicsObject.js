@@ -45,10 +45,14 @@ export default function PhysicsObject(parts, textures, x, y, debug) {
 			}
 			const b = Bodies.polygon(_x, _y, 16, width / 2, defaultOptions);
 			bodies.push(b);
+			console.log(b);
 		}
 
 		if (part === 'body') {
-			const bottom = Bodies.polygon(x, y + height / 4, 16, width / 2, defaultOptions);
+			const bottom = Bodies.polygon(x, y + height / 4, 16, width / 2, {
+				...defaultOptions,
+				density: 0.002,
+			});
 			const verts = Vertices.create([
 				{ x: x, y: y + height / 3},
 				{ x: x + width / 4, y: y + height },
@@ -75,6 +79,11 @@ export default function PhysicsObject(parts, textures, x, y, debug) {
 				sprite.x += 60;
 			}
 
+			if (parts.includes('body')) {
+				_y += -130;
+				sprite.y += -170;
+			}
+
 			const verts = Vertices.create([
 				{ x: x + width, y: y },
 				{ x: x, y: y + height / 2 },
@@ -94,6 +103,10 @@ export default function PhysicsObject(parts, textures, x, y, debug) {
 				_y += 100;
 				sprite.x += -30;
 				sprite.y += 70;
+			}
+
+			if (parts.includes('head')) {
+				sprite.x += -10;
 			}
 
 			const leg = Bodies.rectangle(_x + 10, _y, 10, height, defaultOptions);
