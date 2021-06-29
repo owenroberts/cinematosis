@@ -15,8 +15,8 @@ const defaultOptions = {
 export default function PhysicsObject(parts, textures, x, y, debug) {
 	
 	let isOverlapping = false;
-	const offset = 10,
-		offsetCount = 60;
+	const offset = 16,
+		offsetCount = 80;
 	let currentOffset = offset,
 		currentCount = offsetCount;
 

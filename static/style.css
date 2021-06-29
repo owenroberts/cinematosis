@@ -2,3 +2,8 @@ body {
 	margin: 0;
 	overflow: hidden;
 }
+
+#sound-controls {
+	position: fixed;
+	right: 0;
+}

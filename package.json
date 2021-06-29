@@ -25,6 +25,7 @@
 		"matter-js": "^0.17.1",
 		"pathseg": "^1.2.0",
 		"pixi.js": "^6.0.4",
-		"poly-decomp": "^0.3.0"
+		"poly-decomp": "^0.3.0",
+		"tone": "^14.7.77"
 	}
 }
