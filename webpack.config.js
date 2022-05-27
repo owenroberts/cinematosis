@@ -54,8 +54,11 @@ module.exports = {
 			modules: true,
 		},
 		publicPath: '/build/',
+		watchContentBase: true,	
 		compress: true,
 		port: 7007,
 		hot: true,
+		liveReload: true,
+		open: true,
 	}
 };
