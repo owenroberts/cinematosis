@@ -15,12 +15,11 @@ const defaultOptions = {
 export default function PhysicsObject(parts, textures, x, y, debug) {
 	
 	let isOverlapping = false;
-	const offset = 16,
-		offsetCount = 80;
+	const offset = 16, // jitter animation
+		offsetCount = 20; // duration of jitter animation
 	let currentOffset = offset,
 		currentCount = offsetCount;
 
-	// this.sprite = new Sprite(image);
 	this.sprite = new Container();
 
 	if (typeof parts === 'string') parts = [parts];
@@ -45,7 +44,6 @@ export default function PhysicsObject(parts, textures, x, y, debug) {
 			}
 			const b = Bodies.polygon(_x, _y, 16, width / 2, defaultOptions);
 			bodies.push(b);
-			console.log(b);
 		}
 
 		if (part === 'body') {
@@ -138,8 +136,6 @@ export default function PhysicsObject(parts, textures, x, y, debug) {
 	else this.body = Body.create({ parts: bodies });
 
 	this.body.gameParent = this;
-
-	// console.log(this.body);
 
 	const clampY = -10; // then x goes nuts ...
 

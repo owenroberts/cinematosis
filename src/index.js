@@ -1,91 +1,20 @@
-import { choice, randInt } from './Cool';
-import C from './Constants';
 import * as PIXI from 'pixi.js';
 import { Engine, Runner, Composite, Bodies, Body, Render, MouseConstraint, Mouse, Events } from 'matter-js';
+
+import { choice, randInt } from './Cool';
+import C from './Constants';
+import Sound from './Sound';
 import KeyboardEvent from './KeyboardEvent';
 import PhysicsObject from './PhysicsObject';
 import Terrain from './Terrain';
-import * as Tone from 'tone';
+import Sequencer from './Sequencer';
+import Event from './Event';
 
-let showPhysics = false;
-
-let soundOnBtn = document.getElementById('soundOn'),
-	soundOffBtn = document.getElementById('soundOff');
-let soundStarted = false;
-let soundPaused = false;
-soundOnBtn.addEventListener('click', startSound);
-soundOffBtn.addEventListener('click', pauseSound);
-
-let sfxSynth, joinSynth;
-
-function startSound() {
-	if (!soundStarted) initSound();
-}
-
-async function initSound() {
-	await Tone.start();
-	Tone.Transport.bpm.value = 115;
-	Tone.Transport.start()
-
-	console.log('sound started');
-	soundStarted = true;
-
-	sfxSynth = new Tone.MembraneSynth({
-		pitchDecay: 0.008,
-		octaves: 2,
-		envelope: {
-			attack: 0.01,
-			decay: 0.5,
-			sustain: 0,
-		}
-	}).toDestination();
-	sfxSynth.triggerAttackRelease("E3", "4n", '+0.1', Math.random() * 0.5 + 5);
-
-	joinSynth = new Tone.AMSynth({
-		envelope: {
-			attack: 1,
-		},
-		oscillator: {
-			count: 2,
-		}
-	}).toDestination();
-	joinSynth.triggerAttackRelease("C4", "2n");
-}
-
-function playSFX(type) {
-	if (!soundStarted || soundPaused) return;
-
-	if (type === 'newPart') {
-		const note = choice("C3", "D3", "E3", "F3");
-		sfxSynth.triggerAttackRelease(note, '4n', undefined, Math.random() * 0.5 + 5);
-	}
-
-	if (type === 'grabPart') {
-		const note = choice('G3', 'A4', 'B4', 'C5');
-		sfxSynth.triggerAttackRelease(note, '4n', undefined, Math.random() * 0.5 + 5);
-	}
-
-	if (type === 'releasePart') {
-		const note = choice('B3', 'A3', 'G2', 'F2');
-		sfxSynth.triggerAttackRelease(note, '4n', undefined, Math.random() * 0.5 + 5);
-	}
-
-	if (type === 'joinBodiesStart') {
-		const note = choice("C3", "D3", "E3", "F3");
-		joinSynth.triggerAttack(note, undefined, Math.random() * 0.5 + 5);
-	}
-
-	if (type === 'joinBodiesEnd') {
-		joinSynth.triggerRelease('4n');
-	}
-}
-
-function pauseSound() {
-	soundPaused = true;
-}
+let showPhysics = true;
+let sound = new Sound();
 
 let type = "WebGL";
-if(!PIXI.utils.isWebGLSupported()){
+if(!PIXI.utils.isWebGLSupported()) {
 	type = "canvas";
 }
 PIXI.utils.sayHello(type);
@@ -99,14 +28,17 @@ let renderer = new PIXI.Renderer({
 	width: w, 
 	height: h,
 	antialias: true,
+	resizeTo: window
 });
 let ticker = new PIXI.Ticker();
 let loader = new PIXI.Loader();
 let stage = new Container();
 let renderStage = new Container();
+
 renderStage.addChild(stage);
 document.body.appendChild(renderer.view);
 let state, bg;
+let sequencer = new Sequencer();
 
 C.bodyParts.forEach(partName => {
 	loader.add(partName, `static/images/${partName}.png`);
@@ -121,7 +53,10 @@ function terrainLoaded(verts) {
 }
 
 const engine = Engine.create();
-// engine.gravity.y = 0; // debug
+const runner = Runner.create({
+	delta: 1000 / 60,
+	isFixed: true // tie physics to frame rate
+});
 let physicsRenderer = {
 	stage: new PIXI.Container(),
 	graphics: new PIXI.Graphics(),
@@ -143,16 +78,48 @@ function addPart(parts, x, y) {
 	objects.push(bodyPart);
 	Composite.addBody(engine.world, bodyPart.body);
 	stage.addChild(bodyPart.sprite);
-	playSFX('newPart');
+	sound.playSFX('newPart');
+	return bodyPart;
 }
 
 function setup() {
+	
 	renderer.backgroundColor = 0xebebeb;
 	renderer.autoResize = true;
 
-	// const bodyPart = choice(C.bodyParts);
-	addPart('head', 300, 400);
-	addPart('body', 600, 400);
+	let head = addPart('head', randInt(128, w - 128), randInt(128, h / 2 - 128));
+	head.onClick = function() {
+
+		console.log(head);
+		
+		let startingParts = ['body', 'beak', 'legLeft', 'legRight'];
+		let partCount = 0;
+		startingParts.forEach(part => {
+			sequencer.addEvent(new Event(100, 100, {
+				start: function() {
+					addPart(part, randInt(128, w - 128), randInt(128, h / 2 - 128));
+				},
+				update: function() {
+					return;
+
+					// figure out scaling later
+					let s = 1;
+					let _w = w - s;
+					let r = _w / w;
+
+					stage.width *= r;
+					stage.height *= r;
+
+					Composite.scale(engine.world, r, r, {
+						x: 0, // _w / 2,
+						y: 0, // _h / 2,
+					});
+				}
+			}));
+		});
+		head.onClick = undefined;
+	};
+
 
 	bg = new Sprite(TextureCache.BG);
 	bg.position.set(w / 2, h / 2);
@@ -174,20 +141,15 @@ function setup() {
 	const tw = Math.abs(terrainBody.bounds.max.x - terrainBody.bounds.min.x);
 	const th = Math.abs(terrainBody.bounds.max.y - terrainBody.bounds.min.y);
 
-	// console.log('canvas', w, h);
-	// console.log('image', bg.width, bg.height);
-	// console.log('terrain body', tw, th);
-	
 	bg.position.set(w / 2 - 270, h - 240); // ??
 	Body.setPosition(terrainBody, { x: w / 2, y: h - th / 2});
 	Composite.addBody(engine.world, terrainBody);
-	
+
 	state = play;
 	ticker.add(delta => gameLoop(delta));
 	ticker.start();
-	Runner.run(engine);
+	Runner.run(runner, engine);
 
-	// console.log(Composite.allBodies(engine.world));
 }
 
 function gameLoop(delta){
@@ -195,6 +157,8 @@ function gameLoop(delta){
 }
 
 function play(delta) {
+
+	sequencer.update(delta);
 
 	if (rightArrow.isDown) {
 		bg.x += 1 * delta;
@@ -214,7 +178,6 @@ function play(delta) {
 				}
 			}
 		}
-		
 	}
 
 	if (showPhysics) renderPhysics();
@@ -262,7 +225,7 @@ function joinBodies() {
 	addPart(newParts, x, y);
 	prevMousedBody = undefined;
 	overlappedBody = undefined;
-	playSFX('joinBodiesEnd');
+	sound.playSFX('joinBodiesEnd');
 }
 
 /* mouse events */
@@ -271,12 +234,25 @@ let overlappedBody;
 
 Events.on(mouseConstraint, 'mousedown', event => {
 	if (mouseConstraint.body) {
+		if (mouseConstraint.body.gameParent.onClick) mouseConstraint.body.gameParent.onClick();
 		prevMousedBody = mouseConstraint.body;
 		prevMousedBody.isSensor = true;
 		for (let i = 0; i < prevMousedBody.parts.length; i++) {
 			prevMousedBody.parts[i].isSensor = true;
 		}
-		playSFX('grabPart');
+		sound.playSFX('grabPart');
+	}
+});
+
+Events.on(mouseConstraint, 'mouseover', event => {
+	if (mouseConstraint.body) {
+		if (mouseConstraint.body.gameParent.onClick) mouseConstraint.body.gameParent.onClick();
+		prevMousedBody = mouseConstraint.body;
+		prevMousedBody.isSensor = true;
+		for (let i = 0; i < prevMousedBody.parts.length; i++) {
+			prevMousedBody.parts[i].isSensor = true;
+		}
+		sound.playSFX('grabPart');
 	}
 });
 
@@ -287,7 +263,7 @@ Events.on(mouseConstraint, 'mouseup', event => {
 			prevMousedBody.parts[i].isSensor = false;
 		}
 		prevMousedBody = undefined;
-		playSFX('releasePart');
+		sound.playSFX('releasePart');
 	}
 });
 
@@ -305,7 +281,7 @@ Events.on(engine, 'collisionStart', event => {
 					a.gameParent.startOverlap();
 					b.gameParent.startOverlap();
 					overlappedBody = a.id === prevMousedBody.id ? b : a;
-					playSFX('joinBodiesStart');
+					sound.playSFX('joinBodiesStart');
 				}
 			}
 		}
@@ -324,8 +300,7 @@ Events.on(engine, 'collisionEnd', function(event) {
 				a.gameParent.unOverlap();
 				b.gameParent.unOverlap();
 				overlappedBody = undefined;
-				playSFX('joinBodiesEnd');
-
+				sound.playSFX('joinBodiesEnd');
 			}
 		}
 	}
@@ -343,7 +318,7 @@ nKey.press = function() {
 
 let sKey = KeyboardEvent('s');
 sKey.press = function() {
-	startSound();
+	sound.start();
 };
 
 let gKey = KeyboardEvent('g');
